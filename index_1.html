@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCP-мост OpenMetadata</title>
+<style>
+  :root{
+    --bg:#f7f6f3;
+    --panel:#ffffff;
+    --ink:#1b1f23;
+    --sub:#5b6472;
+    --line:#d8d4cb;
+    --accent:#b5563a;
+    --accent-soft:#f1e3dd;
+    --ok:#3f7a54;
+    --ok-soft:#e4efe7;
+    --user-bubble:#1b1f23;
+    --user-ink:#ffffff;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#171513;
+      --panel:#211e1b;
+      --ink:#eee9e2;
+      --sub:#a79f93;
+      --line:#3a352f;
+      --accent:#e08464;
+      --accent-soft:#3a2620;
+      --ok:#7bc394;
+      --ok-soft:#1d2a20;
+      --user-bubble:#eee9e2;
+      --user-ink:#171513;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;
+    display:flex;
+    flex-direction:column;
+  }
+  header{
+    padding:14px 20px;
+    border-bottom:1px solid var(--line);
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  header h1{font-size:16px;margin:0;font-weight:700}
+  header .meta{font-size:12px;color:var(--sub)}
+  #chat{
+    flex:1;
+    overflow-y:auto;
+    padding:20px;
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+    max-width:860px;
+    width:100%;
+    margin:0 auto;
+  }
+  .row{display:flex;flex-direction:column;max-width:80%}
+  .row.user{align-self:flex-end;align-items:flex-end}
+  .row.bot{align-self:flex-start;align-items:flex-start}
+  .bubble{
+    padding:10px 14px;
+    border-radius:14px;
+    font-size:14.5px;
+    line-height:1.5;
+    white-space:pre-wrap;
+    word-break:break-word;
+  }
+  .row.user .bubble{background:var(--user-bubble);color:var(--user-ink);border-bottom-right-radius:4px}
+  .row.bot .bubble{background:var(--panel);border:1px solid var(--line);border-bottom-left-radius:4px}
+  .row.bot .bubble.error{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+
+  .tools{
+    margin-top:6px;
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    width:100%;
+  }
+  .tool-call{
+    font-size:12px;
+    font-family:ui-monospace,"JetBrains Mono",Menlo,monospace;
+    color:var(--sub);
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:6px 10px;
+    display:flex;
+    gap:8px;
+    align-items:flex-start;
+  }
+  .tool-call .dot{
+    flex:none;
+    width:7px;height:7px;border-radius:50%;
+    margin-top:5px;
+    background:var(--sub);
+  }
+  .tool-call.done .dot{background:var(--ok)}
+  .tool-call .body{flex:1;min-width:0}
+  .tool-call .name{color:var(--ink);font-weight:700}
+  .tool-call .result{color:var(--sub);margin-top:2px}
+
+  .thinking{font-size:12.5px;color:var(--sub);font-style:italic}
+
+  footer{
+    border-top:1px solid var(--line);
+    padding:14px 20px;
+    background:var(--bg);
+  }
+  #form{
+    max-width:860px;
+    margin:0 auto;
+    display:flex;
+    gap:10px;
+  }
+  #q{
+    flex:1;
+    padding:11px 14px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:var(--panel);
+    color:var(--ink);
+    font-size:14.5px;
+  }
+  #q:focus{outline:2px solid var(--accent);outline-offset:1px}
+  button{
+    padding:0 20px;
+    border-radius:10px;
+    border:none;
+    background:var(--accent);
+    color:#fff;
+    font-size:14.5px;
+    font-weight:600;
+    cursor:pointer;
+  }
+  button:disabled{opacity:.5;cursor:default}
+  .examples{
+    max-width:860px;
+    margin:8px auto 0;
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  .examples button{
+    background:var(--panel);
+    color:var(--sub);
+    border:1px solid var(--line);
+    font-weight:400;
+    font-size:12.5px;
+    padding:6px 12px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>MCP-мост · OpenMetadata</h1>
+  <span class="meta" id="configLine">подключение к каталогу…</span>
+</header>
+
+<div id="chat"></div>
+
+<footer>
+  <div class="examples" id="examples"></div>
+  <form id="form">
+    <input id="q" autocomplete="off" placeholder="Спросите про каталог данных…" />
+    <button id="send" type="submit">Отправить</button>
+  </form>
+</footer>
+
+<script>
+const chat = document.getElementById('chat');
+const form = document.getElementById('form');
+const input = document.getElementById('q');
+const sendBtn = document.getElementById('send');
+const configLine = document.getElementById('configLine');
+const examplesEl = document.getElementById('examples');
+
+const EXAMPLES = [
+  "Сколько источников данных сейчас подключено в каталоге и какие это сервисы?",
+  "В каких таблицах или контейнерах есть данные о продажах компании A и компании B, и есть ли у них PII-теги?",
+  "Покажи структуру датасета company_a/raw — какие колонки и типы данных?",
+  "Какие дашборды в Superset связаны с данными о продажах?",
+];
+
+for (const ex of EXAMPLES) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = ex.length > 48 ? ex.slice(0, 48) + '…' : ex;
+  b.title = ex;
+  b.onclick = () => { input.value = ex; form.requestSubmit(); };
+  examplesEl.appendChild(b);
+}
+
+fetch('/api/config').then(r => r.json()).then(cfg => {
+  configLine.textContent = `модель: ${cfg.inference_model} · инструментов: ${cfg.tools_loaded}`;
+}).catch(() => {
+  configLine.textContent = 'не удалось получить конфигурацию сервера';
+});
+
+function addRow(role) {
+  const row = document.createElement('div');
+  row.className = 'row ' + role;
+  chat.appendChild(row);
+  chat.scrollTop = chat.scrollHeight;
+  return row;
+}
+
+function addBubble(row, text, isError) {
+  const b = document.createElement('div');
+  b.className = 'bubble' + (isError ? ' error' : '');
+  b.textContent = text;
+  row.appendChild(b);
+  chat.scrollTop = chat.scrollHeight;
+  return b;
+}
+
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const question = input.value.trim();
+  if (!question) return;
+
+  const userRow = addRow('user');
+  addBubble(userRow, question);
+  input.value = '';
+  input.disabled = true;
+  sendBtn.disabled = true;
+
+  const botRow = addRow('bot');
+  const thinking = document.createElement('div');
+  thinking.className = 'thinking';
+  thinking.textContent = 'думает…';
+  botRow.appendChild(thinking);
+
+  const toolsBox = document.createElement('div');
+  toolsBox.className = 'tools';
+  botRow.appendChild(toolsBox);
+
+  const openToolRows = {};
+  let stepCounter = 0;
+
+  const es = new EventSource('/api/ask?q=' + encodeURIComponent(question));
+
+  es.onmessage = (ev) => {
+    const data = JSON.parse(ev.data);
+    chat.scrollTop = chat.scrollHeight;
+
+    if (data.type === 'config') {
+      return;
+    }
+
+    if (data.type === 'tool_call') {
+      stepCounter++;
+      const row = document.createElement('div');
+      row.className = 'tool-call';
+      const argsStr = JSON.stringify(data.args);
+      row.innerHTML = `<span class="dot"></span><span class="body"><span class="name">${data.name}</span>(${escapeHtml(argsStr)})<div class="result">выполняется…</div></span>`;
+      toolsBox.appendChild(row);
+      openToolRows[data.name + ':' + data.step] = row;
+      thinking.textContent = `шаг ${stepCounter} · вызов ${data.name}`;
+      chat.scrollTop = chat.scrollHeight;
+      return;
+    }
+
+    if (data.type === 'tool_result') {
+      const key = data.name + ':' + data.step;
+      const row = openToolRows[key];
+      if (row) {
+        row.classList.add('done');
+        row.querySelector('.result').textContent = `готово · ${data.length} симв.`;
+      }
+      chat.scrollTop = chat.scrollHeight;
+      return;
+    }
+
+    if (data.type === 'final') {
+      thinking.remove();
+      addBubble(botRow, data.content || '(пустой ответ)');
+      finish();
+      return;
+    }
+
+    if (data.type === 'limit_reached') {
+      thinking.remove();
+      addBubble(botRow, 'Достигнут лимит шагов без финального ответа. Попробуйте переформулировать вопрос конкретнее.', true);
+      finish();
+      return;
+    }
+
+    if (data.type === 'error') {
+      thinking.remove();
+      addBubble(botRow, 'Ошибка: ' + data.message, true);
+      finish();
+      return;
+    }
+  };
+
+  es.onerror = () => {
+    // Поток уже закрыт сервером после final/limit_reached/error — это ожидаемо.
+    // Если сообщение так и не пришло, покажем явную ошибку соединения.
+    if (botRow.querySelector('.bubble') === null) {
+      thinking.remove();
+      addBubble(botRow, 'Соединение прервано до получения ответа.', true);
+    }
+    finish();
+  };
+
+  function finish() {
+    es.close();
+    input.disabled = false;
+    sendBtn.disabled = false;
+    input.focus();
+  }
+});
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+input.focus();
+</script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+httpx
+mcp
+openai
+fastapi
+uvicorn[standard]
