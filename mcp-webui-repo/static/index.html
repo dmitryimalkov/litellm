@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCP-мост OpenMetadata</title>
+<style>
+  :root{
+    --bg:#f7f6f3;
+    --panel:#ffffff;
+    --ink:#1b1f23;
+    --sub:#5b6472;
+    --line:#d8d4cb;
+    --accent:#b5563a;
+    --accent-soft:#f1e3dd;
+    --ok:#3f7a54;
+    --ok-soft:#e4efe7;
+    --user-bubble:#1b1f23;
+    --user-ink:#ffffff;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#171513;
+      --panel:#211e1b;
+      --ink:#eee9e2;
+      --sub:#a79f93;
+      --line:#3a352f;
+      --accent:#e08464;
+      --accent-soft:#3a2620;
+      --ok:#7bc394;
+      --ok-soft:#1d2a20;
+      --user-bubble:#eee9e2;
+      --user-ink:#171513;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;
+    display:flex;
+    flex-direction:column;
+  }
+  header{
+    padding:14px 20px;
+    border-bottom:1px solid var(--line);
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  header h1{font-size:16px;margin:0;font-weight:700}
+  header .meta{font-size:12px;color:var(--sub)}
+  #chat{
+    flex:1;
+    overflow-y:auto;
+    padding:20px;
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+    max-width:860px;
+    width:100%;
+    margin:0 auto;
+  }
+  .row{display:flex;flex-direction:column;max-width:80%}
+  .row.user{align-self:flex-end;align-items:flex-end}
+  .row.bot{align-self:flex-start;align-items:flex-start}
+  .bubble{
+    padding:10px 14px;
+    border-radius:14px;
+    font-size:14.5px;
+    line-height:1.5;
+    white-space:pre-wrap;
+    word-break:break-word;
+  }
+  .row.user .bubble{background:var(--user-bubble);color:var(--user-ink);border-bottom-right-radius:4px}
+  .row.bot .bubble{background:var(--panel);border:1px solid var(--line);border-bottom-left-radius:4px}
+  .row.bot .bubble.error{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+
+  .tools{
+    margin-top:6px;
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    width:100%;
+  }
+  .tool-call{
+    font-size:12px;
+    font-family:ui-monospace,"JetBrains Mono",Menlo,monospace;
+    color:var(--sub);
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:6px 10px;
+    display:flex;
+    gap:8px;
+    align-items:flex-start;
+  }
+  .tool-call .dot{
+    flex:none;
+    width:7px;height:7px;border-radius:50%;
+    margin-top:5px;
+    background:var(--sub);
+  }
+  .tool-call.done .dot{background:var(--ok)}
+  .tool-call .body{flex:1;min-width:0}
+  .tool-call .name{color:var(--ink);font-weight:700}
+  .tool-call .result{color:var(--sub);margin-top:2px}
+
+  .thinking{font-size:12.5px;color:var(--sub);font-style:italic;font-variant-numeric:tabular-nums}
+
+  /* Markdown в ответе бота */
+  .bubble.md{white-space:normal}
+  .bubble.md > :first-child{margin-top:0}
+  .bubble.md > :last-child{margin-bottom:0}
+  .bubble.md h1,.bubble.md h2,.bubble.md h3,.bubble.md h4{margin:14px 0 6px;line-height:1.3}
+  .bubble.md h1{font-size:18px}
+  .bubble.md h2{font-size:16.5px}
+  .bubble.md h3{font-size:15.5px}
+  .bubble.md h4{font-size:14.5px}
+  .bubble.md p{margin:8px 0}
+  .bubble.md ul,.bubble.md ol{margin:8px 0;padding-left:22px}
+  .bubble.md li{margin:3px 0}
+  .bubble.md hr{border:none;border-top:1px solid var(--line);margin:12px 0}
+  .bubble.md code{
+    font-family:ui-monospace,"JetBrains Mono",Menlo,monospace;
+    font-size:12.5px;
+    background:var(--bg);
+    border:1px solid var(--line);
+    border-radius:5px;
+    padding:1px 5px;
+  }
+  .bubble.md pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow-x:auto}
+  .bubble.md pre code{border:none;padding:0;background:none}
+  .bubble.md table{border-collapse:collapse;margin:10px 0;font-size:13.5px;display:block;overflow-x:auto;max-width:100%}
+  .bubble.md th,.bubble.md td{border:1px solid var(--line);padding:6px 10px;text-align:left}
+  .bubble.md th{background:var(--bg);font-weight:600}
+  .bubble.md a{color:var(--accent)}
+
+  .tool-call .tok{color:var(--sub);margin-top:2px;opacity:.85}
+  .graph-box{width:min(100%,900px);box-sizing:border-box;margin-top:8px;padding:10px 12px;background:var(--panel,var(--bg));border:1px solid var(--line);border-radius:10px;overflow-x:auto}
+  .graph-box h4{margin:0 0 8px;font-size:13px;font-weight:600;color:var(--ink)}
+  .graph-box svg{height:auto}
+  .graph-legend{margin-top:8px;font-size:12px;color:var(--sub)}
+  .graph-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin:0 4px 0 10px;vertical-align:-1px}
+  .graph-legend i:first-child{margin-left:0}
+  .graph-note{margin-top:6px;font-size:12px;color:var(--sub)}
+  .usage-line{
+    margin-top:6px;
+    font-size:12px;
+    color:var(--sub);
+    font-variant-numeric:tabular-nums;
+  }
+  .usage-line b{color:var(--ink);font-weight:600}
+  .session{
+    margin-left:auto;
+    font-size:12px;
+    color:var(--sub);
+    font-variant-numeric:tabular-nums;
+    display:flex;
+    gap:8px;
+    align-items:baseline;
+  }
+  .session b{color:var(--ink);font-weight:600}
+  .session button{
+    all:unset;
+    cursor:pointer;
+    color:var(--accent);
+    font-size:12px;
+    text-decoration:underline;
+  }
+
+  footer{
+    border-top:1px solid var(--line);
+    padding:14px 20px;
+    background:var(--bg);
+  }
+  #form{
+    max-width:860px;
+    margin:0 auto;
+    display:flex;
+    gap:10px;
+  }
+  #q{
+    flex:1;
+    padding:11px 14px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:var(--panel);
+    color:var(--ink);
+    font-size:14.5px;
+  }
+  #q:focus{outline:2px solid var(--accent);outline-offset:1px}
+  button{
+    padding:0 20px;
+    border-radius:10px;
+    border:none;
+    background:var(--accent);
+    color:#fff;
+    font-size:14.5px;
+    font-weight:600;
+    cursor:pointer;
+  }
+  button:disabled{opacity:.5;cursor:default}
+  .examples{
+    max-width:860px;
+    margin:8px auto 0;
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  .examples button{
+    background:var(--panel);
+    color:var(--sub);
+    border:1px solid var(--line);
+    font-weight:400;
+    font-size:12.5px;
+    padding:6px 12px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>MCP-мост · OpenMetadata</h1>
+  <span class="meta" id="configLine">подключение к каталогу…</span>
+  <span class="session" id="sessionLine" title="Сумма токенов по всем вопросам на этой странице">
+    <span id="sessionText"></span>
+    <button type="button" id="sessionReset">сбросить</button>
+  </span>
+</header>
+
+<div id="chat"></div>
+
+<footer>
+  <div class="examples" id="examples"></div>
+  <form id="form">
+    <input id="q" autocomplete="off" placeholder="Спросите про каталог данных…" />
+    <button id="send" type="submit">Отправить</button>
+  </form>
+</footer>
+
+<script src="/static/vendor/marked.min.js"></script>
+<script src="/static/vendor/purify.min.js"></script>
+<script src="/static/vendor/mermaid.min.js"></script>
+<script>
+const chat = document.getElementById('chat');
+const form = document.getElementById('form');
+const input = document.getElementById('q');
+const sendBtn = document.getElementById('send');
+const configLine = document.getElementById('configLine');
+const examplesEl = document.getElementById('examples');
+const sessionText = document.getElementById('sessionText');
+const sessionReset = document.getElementById('sessionReset');
+
+// ---- Счётчик токенов за сессию страницы (хранится в sessionStorage вкладки) ----
+const SESSION_KEY = 'mcpBridgeSessionTokens';
+let session = { questions: 0, prompt: 0, completion: 0, estimated: false };
+try {
+  const saved = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
+  if (saved && typeof saved.prompt === 'number') session = saved;
+} catch (e) { /* без хранилища работаем только в памяти */ }
+
+function fmt(n) { return Number(n).toLocaleString('ru-RU'); }
+function secs(n) { return Number(n).toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 }); }
+
+function renderSession() {
+  const total = session.prompt + session.completion;
+  const approx = session.estimated ? '~' : '';
+  sessionText.innerHTML = session.questions === 0
+    ? 'токены за сессию: 0'
+    : `токены за сессию: <b>${approx}${fmt(total)}</b> · вопросов: ${session.questions}`;
+}
+
+function saveSession() {
+  try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch (e) {}
+}
+
+sessionReset.onclick = () => {
+  session = { questions: 0, prompt: 0, completion: 0, estimated: false };
+  saveSession();
+  renderSession();
+};
+renderSession();
+
+function addUsage(botRow, u) {
+  if (!u) return;
+  const approx = u.estimated ? '~' : '';
+  const line = document.createElement('div');
+  line.className = 'usage-line';
+  line.innerHTML =
+    `Токены: <b>${approx}${fmt(u.total)}</b> (вход ${approx}${fmt(u.prompt)} · выход ${approx}${fmt(u.completion)})` +
+    ` · вызовов модели: ${u.calls}` +
+    (u.seconds ? ` · на модель ${secs(u.seconds)} с` : '') +
+    (u.estimated ? ' · оценка по длине текста: шлюз не вернул usage' : '');
+  botRow.appendChild(line);
+
+  session.questions += 1;
+  session.prompt += u.prompt;
+  session.completion += u.completion;
+  if (u.estimated) session.estimated = true;
+  saveSession();
+  renderSession();
+}
+
+const EXAMPLES = [
+  "Сколько источников данных сейчас подключено в каталоге и какие это сервисы?",
+  "В каких таблицах или контейнерах есть данные о продажах компании A и компании B, и есть ли у них PII-теги?",
+  "Покажи структуру датасета company_a/raw — какие колонки и типы данных?",
+  "Какие дашборды в Superset связаны с данными о продажах?",
+  "Покажи lineage таблицы sales_transactions: откуда приходят данные и куда уходят?",
+];
+
+for (const ex of EXAMPLES) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = ex.length > 48 ? ex.slice(0, 48) + '…' : ex;
+  b.title = ex;
+  b.onclick = () => { input.value = ex; form.requestSubmit(); };
+  examplesEl.appendChild(b);
+}
+
+fetch('/api/config').then(r => r.json()).then(cfg => {
+  const total = cfg.tools_total && cfg.tools_total !== cfg.tools_loaded ? ` из ${cfg.tools_total}` : '';
+  configLine.textContent = `модель: ${cfg.inference_model} · инструментов: ${cfg.tools_loaded}${total}`;
+}).catch(() => {
+  configLine.textContent = 'не удалось получить конфигурацию сервера';
+});
+
+function addRow(role) {
+  const row = document.createElement('div');
+  row.className = 'row ' + role;
+  chat.appendChild(row);
+  chat.scrollTop = chat.scrollHeight;
+  return row;
+}
+
+if (window.marked) marked.setOptions({ gfm: true, breaks: true });
+if (window.DOMPurify) {
+  // Ссылки из ответа модели открываем в новой вкладке и без доступа к странице.
+  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+    if (node.tagName === 'A') { node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener noreferrer'); }
+  });
+}
+
+// ---- Граф lineage (Mermaid) ----
+const GRAPH_COLORS = {
+  table:['#dbeafe','#1d4ed8'], container:['#dcfce7','#15803d'], pipeline:['#fef3c7','#b45309'],
+  dashboard:['#ede9fe','#6d28d9'], topic:['#fce7f3','#be185d'], mlmodel:['#cffafe','#0e7490'], metric:['#ffedd5','#c2410c'], other:['#e5e7eb','#374151']
+};
+const GRAPH_NAMES = { table:'таблица', container:'хранилище', pipeline:'пайплайн', dashboard:'дашборд', metric:'метрика', other:'другое' };
+let graphSeq = 0;
+function graphKind(t) {
+  t = String(t || '').toLowerCase();
+  if (t.includes('table') || t.includes('database')) return 'table';
+  if (t.includes('container') || t.includes('storage')) return 'container';
+  if (t.includes('pipeline')) return 'pipeline';
+  if (t.includes('metric')) return 'metric';
+  if (t.includes('dashboard') || t.includes('chart')) return 'dashboard';
+  return GRAPH_COLORS[t] ? t : 'other';
+}
+function buildMermaid(g) {
+  const q = (s) => '"' + String(s).replace(/["<>&\\]/g, ' ').replace(/[\r\n]+/g, ' ').slice(0, 40) + '"';
+  const lines = ['flowchart LR'];
+  const used = new Set();
+  for (const n of g.nodes) {
+    const k = graphKind(n.type); used.add(k);
+    const lab = /datamodel/i.test(String(n.type)) ? n.label + ' (модель)' : n.label;
+    lines.push(`  ${n.id}[${q(lab)}]:::${k}`);
+  }
+  for (const [a, b] of g.edges) lines.push(`  ${a} --> ${b}`);
+  for (const k of Object.keys(GRAPH_COLORS)) lines.push(`  classDef ${k} fill:${GRAPH_COLORS[k][0]},stroke:${GRAPH_COLORS[k][1]},color:#111827`);
+  return { text: lines.join('\n'), used };
+}
+async function renderGraph(row, g) {
+  if (!g || !g.edges || !g.edges.length || !window.mermaid) return;
+  const box = document.createElement('div');
+  box.className = 'graph-box';
+  const h = document.createElement('h4'); h.textContent = 'Lineage'; box.appendChild(h);
+  row.appendChild(box);
+  try {
+    const dark = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
+    mermaid.initialize({ startOnLoad:false, securityLevel:'strict', flowchart:{ useMaxWidth:true, nodeSpacing:18, rankSpacing:36, padding:6 }, themeVariables:{ fontSize:'13px' }, theme: dark ? 'dark' : 'default' });
+    const { text, used } = buildMermaid(g);
+    const { svg } = await mermaid.render('lineage' + (++graphSeq), text);
+    const holder = document.createElement('div');
+    holder.innerHTML = DOMPurify.sanitize(svg, { USE_PROFILES:{ svg:true, svgFilters:true }, ADD_TAGS:['foreignObject'] });
+    box.appendChild(holder);
+    const lg = document.createElement('div'); lg.className = 'graph-legend';
+    for (const k of used) {
+      const i = document.createElement('i'); i.style.background = GRAPH_COLORS[k][0]; i.style.border = '1px solid ' + GRAPH_COLORS[k][1];
+      lg.appendChild(i); lg.appendChild(document.createTextNode(GRAPH_NAMES[k] || k));
+    }
+    box.appendChild(lg);
+    if (g.truncated) { const t = document.createElement('div'); t.className='graph-note'; t.textContent='Граф урезан: показаны первые узлы.'; box.appendChild(t); }
+  } catch (e) {
+    h.textContent = 'Lineage: граф не удалось нарисовать (' + String((e && e.message) || e).slice(0, 200) + ')';
+    console.warn('lineage render failed', e, g);
+  }
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function renderMarkdown(text) {
+  // Ответ модели и метаданные каталога — недоверенный текст: всегда через DOMPurify.
+  return DOMPurify.sanitize(marked.parse(text));
+}
+
+function addBubble(row, text, isError, markdown) {
+  const b = document.createElement('div');
+  const md = !!markdown && window.marked && window.DOMPurify;
+  b.className = 'bubble' + (isError ? ' error' : '') + (md ? ' md' : '');
+  if (md) b.innerHTML = renderMarkdown(text);
+  else b.textContent = text;
+  row.appendChild(b);
+  chat.scrollTop = chat.scrollHeight;
+  return b;
+}
+
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const question = input.value.trim();
+  if (!question) return;
+
+  const userRow = addRow('user');
+  addBubble(userRow, question);
+  input.value = '';
+  input.disabled = true;
+  sendBtn.disabled = true;
+
+  const botRow = addRow('bot');
+  const thinking = document.createElement('div');
+  thinking.className = 'thinking';
+  botRow.appendChild(thinking);
+
+  // Строка статуса с секундомером: долгий шаг модели не выглядит как зависание.
+  const startedAt = Date.now();
+  let statusText = 'думает…';
+  const paintStatus = () => {
+    thinking.textContent = `${statusText} · ${Math.floor((Date.now() - startedAt) / 1000)} с`;
+  };
+  const setStatus = (text) => { statusText = text; paintStatus(); };
+  paintStatus();
+  const timer = setInterval(paintStatus, 1000);
+
+  const toolsBox = document.createElement('div');
+  toolsBox.className = 'tools';
+  botRow.appendChild(toolsBox);
+
+  const openToolRows = {};
+  const stepUsage = {};
+  const stepUsageShown = {};
+  let stepCounter = 0;
+  let pendingGraph = null;
+
+  const es = new EventSource('/api/ask?q=' + encodeURIComponent(question));
+
+  es.onmessage = (ev) => {
+    const data = JSON.parse(ev.data);
+    chat.scrollTop = chat.scrollHeight;
+
+    if (data.type === 'queued') {
+      setStatus('в очереди: сервер обрабатывает предыдущий вопрос');
+      return;
+    }
+
+    if (data.type === 'config') {
+      setStatus('думает…');
+      return;
+    }
+
+    if (data.type === 'notice') {
+      setStatus(data.message);
+      return;
+    }
+
+    if (data.type === 'usage') {
+      stepUsage[data.step] = data;
+      return;
+    }
+
+    if (data.type === 'tool_call') {
+      stepCounter++;
+      const row = document.createElement('div');
+      row.className = 'tool-call';
+      const argsStr = JSON.stringify(data.args);
+      row.innerHTML = `<span class="dot"></span><span class="body"><span class="name">${escapeHtml(data.name)}</span>(${escapeHtml(argsStr)})<div class="result">выполняется…</div></span>`;
+      const su = stepUsage[data.step];
+      if (su && !stepUsageShown[data.step]) {
+        stepUsageShown[data.step] = true;
+        const approx = su.estimated ? '~' : '';
+        const tok = document.createElement('div');
+        tok.className = 'tok';
+        tok.textContent = `модель на шаге ${data.step + 1}: вход ${approx}${fmt(su.prompt)} · выход ${approx}${fmt(su.completion)} токенов · ${secs(su.seconds || 0)} с`;
+        row.querySelector('.body').appendChild(tok);
+      }
+      toolsBox.appendChild(row);
+      openToolRows[data.name + ':' + data.step] = row;
+      setStatus(`шаг ${stepCounter} · вызов ${data.name}`);
+      chat.scrollTop = chat.scrollHeight;
+      return;
+    }
+
+    if (data.type === 'tool_result') {
+      setStatus('думает…');
+      const key = data.name + ':' + data.step;
+      const row = openToolRows[key];
+      if (row) {
+        row.classList.add('done');
+        row.querySelector('.result').textContent = `готово · ${data.length} симв.`;
+      }
+      chat.scrollTop = chat.scrollHeight;
+      return;
+    }
+
+    if (data.type === 'graph') {
+      pendingGraph = data;
+      return;
+    }
+
+    if (data.type === 'final') {
+      thinking.remove();
+      const fb = addBubble(botRow, data.content || '(пустой ответ)', false, true);
+      if (pendingGraph && pendingGraph.edges && pendingGraph.edges.length) {
+        fb.querySelectorAll('pre').forEach((pre) => {
+          if (/[─│┌└├┐┘▼►→]|-->|──/.test(pre.textContent)) {
+            const h = pre.previousElementSibling;
+            pre.remove();
+            if (h && /^H[1-6]$/.test(h.tagName) && /схем/i.test(h.textContent)) h.remove();
+          }
+        });
+      }
+      renderGraph(botRow, pendingGraph);
+      addUsage(botRow, data.usage);
+      finish();
+      return;
+    }
+
+    if (data.type === 'limit_reached') {
+      thinking.remove();
+      addBubble(botRow, 'Достигнут лимит шагов без финального ответа. Попробуйте переформулировать вопрос конкретнее.', true);
+      addUsage(botRow, data.usage);
+      finish();
+      return;
+    }
+
+    if (data.type === 'error') {
+      thinking.remove();
+      addBubble(botRow, 'Ошибка: ' + data.message, true);
+      addUsage(botRow, data.usage);
+      finish();
+      return;
+    }
+  };
+
+  es.onerror = () => {
+    // Поток уже закрыт сервером после final/limit_reached/error — это ожидаемо.
+    // Если сообщение так и не пришло, покажем явную ошибку соединения.
+    if (botRow.querySelector('.bubble') === null) {
+      thinking.remove();
+      addBubble(botRow, 'Соединение прервано до получения ответа.', true);
+    }
+    finish();
+  };
+
+  function finish() {
+    clearInterval(timer);
+    es.close();
+    input.disabled = false;
+    sendBtn.disabled = false;
+    input.focus();
+  }
+});
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+input.focus();
+</script>
+</body>
+</html>

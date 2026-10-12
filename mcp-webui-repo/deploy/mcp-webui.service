@@ -1,0 +1,13 @@
+[Unit]
+Description=MCP web UI (OpenMetadata bridge)
+After=network-online.target
+
+[Service]
+User=user1
+WorkingDirectory=/opt/mcp-webui
+EnvironmentFile=/opt/mcp-webui/.env
+ExecStart=/opt/mcp-webui/venv/bin/uvicorn server:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
